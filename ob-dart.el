@@ -62,33 +62,31 @@ Args:
                     or for the key `:results', (value raw)
                     from Babel args `:results value raw'."
   (message "executing Dart source code block")
-  ;; (processed-params = org-babel-process-params RETURNS assoc list with slightly
-  ;;     reformatted list of :param values from all elements after #+begin_src
-  ;;   For example, from ':results output raw', the function creates two assoc elements,
-  ;;     one is (:result-type . output), second is (:result-params . raw)
-  ;;   Variables are converted to PROPERTY LIST in the result.
-  ;;   Other less frequent parameters like  (:colname-names . (list names)) are cons cells.
   (let* ((processed-params (org-babel-process-params params))
          (session (ob-dart-initiate-session (nth 0 processed-params)))
          (vars (nth 1 processed-params))
          (result-params (nth 2 processed-params))
          (result-type (cdr (assoc :result-type params)))
-         (full-body (org-babel-expand-body:generic
-                     body params))
-         ;; ob-dart-evaluate is the core function, which
-         ;;   - generates dart code from `body' wrapped in `ob-dart-wrapper'
-         ;;   - calls the generated dart code in shell
-         ;;   - processes the shell's stdout and stderr
-         (result (ob-dart-evaluate
-                  session full-body result-type result-params)))
+         (full-body (org-babel-expand-body:generic body params))
+         (var-declarations (ob-dart-get-var-declarations vars))) ; New variable declaration
 
-    (org-babel-reassemble-table
-     result
-     (org-babel-pick-name
-      (cdr (assoc :colname-names params)) (cdr (assoc :colnames params)))
-     (org-babel-pick-name
-      (cdr (assoc :rowname-names params)) (cdr (assoc :rownames params))))))
+    ;; Append the variable declarations to the code body
+    (setq full-body (concat var-declarations full-body))
 
+    (let ((result (ob-dart-evaluate
+                   session full-body result-type result-params)))
+      (org-babel-reassemble-table
+       result
+       (org-babel-pick-name
+        (cdr (assoc :colname-names params)) (cdr (assoc :colnames params)))
+       (org-babel-pick-name
+        (cdr (assoc :rowname-names params)) (cdr (assoc :rownames params)))))))
+
+(defun ob-dart-get-var-declarations (vars)
+  "Generate Dart variable declarations for VARS from the given VAR list."
+  (mapconcat (lambda (var)
+               (format "var %s = %s;" (car var) (cdr var)))
+             vars "\n"))
 
 (defun ob-dart-evaluate (session body &optional result-type result-params)
   "Evaluate BODY in external Dart process.
@@ -111,7 +109,7 @@ Args:
 
   ;; Set the name generated-filename='generated-filename=/tmp/dart-RAND.dart'
   (let* ((generated-filename (org-babel-temp-file "dart-")))
-    
+
     ;; Create 'temp-file' named 'generated-filename',
     ;;   and insert into it the Dart code generated from body.
 
@@ -154,7 +152,7 @@ Args:
     ;;    See the 'org-babel-dart-wrapper-method' for Dart code that runs the .
     ;; 6. The contents of the temp-buffer is returned to caller as
     ;;      'buffer-string' ; string of the temp-buffer, stdout from Dart.
-    ;;  
+    ;;
     ;; Note: Test this step 3. in 'scratch' as if the temp-buffer was scratch:
     ;;         - Place pointer to 'scratch' and do
     ;;         - Alt-: (org-babel--shell-command-on-region "echo Hello" "")
@@ -192,13 +190,13 @@ Args:
     ;;        display                 ; has nil, means no action
     ;;        args1     = sh-switch   ; has probably empty
     ;;        args2     = command ; 'dart /tmp/dart-RAND.dart "output|value"'
-    ;;         
+    ;;
     ;; 4. The above step 3 means:
     ;;     - Exec 'dart /tmp/dart-RAND.dart "output|value"'
     ;;     - Place stdout to current buffer (t), which is the with-temp-buff
     ;;       created by 'org-babel-eval'
     ;;     - Places stderr in the error-file viewed by the error-buffer
-    ;; 
+    ;;
 
     ;; Run org-babel-eval, a shell process that calls dart on the generated-filename.
     (let ((raw (org-babel-eval
@@ -345,7 +343,7 @@ class Gen {
   ///   if org file has NO MAIN, code is from between #+begin_src and #+end_src.
   ///   if org file has MAIN,    code is copied from main.
   /// Either way, async is added if the code block contains await.
-  /// That is theory: for files with MAIN, we add async here if the main is async. 
+  /// That is theory: for files with MAIN, we add async here if the main is async.
   runBlock(List args) %a {
     //   - Org code block from begin_src .. end_src inserted here by elisp format.
     //   - See `ob-dart-wrapper` and `format-spec` in wrap-body.esh and ob-dart.el
