@@ -83,9 +83,13 @@ Args:
         (cdr (assoc :rowname-names params)) (cdr (assoc :rownames params)))))))
 
 (defun ob-dart-get-var-declarations (vars)
-  "Generate Dart variable declarations for VARS from the given VAR list."
+  "Generate Dart variable declarations from the given VARS list."
   (mapconcat (lambda (var)
-               (format "var %s = %s;" (car var) (cdr var)))
+               (format "var %s = %s;"
+                       (car var)
+                       (if (listp (cdr var))
+                           (mapconcat #'identity (cdr var) ", ")
+                         (cdr var))))
              vars "\n"))
 
 (defun ob-dart-evaluate (session body &optional result-type result-params)
